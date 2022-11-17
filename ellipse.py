@@ -20,6 +20,8 @@
     (***) White, A. McHale, B. 'Faraday rotation data analysis with least-squares  # noqa: E501
         elliptical fitting'
 """
+# 11/16/2022 az - modified calculation of [eqn. 21 and 22] from (**) to agree with wolfram
+#
 import numpy as np
 import numpy.linalg as la
 
@@ -171,21 +173,25 @@ class LsqEllipse:
 
         # Find the semi-axes lengths [eqn. 21 and 22] from (**)
         numerator = 2 * (a*f**2 + c*d**2 + g*b**2 - 2*b*d*f - a*c*g)
-        denominator1 = (b * b - a * c) * (
-            (c - a) * np.sqrt(1 + 4*b*b / ((a - c)*(a - c))) - (c + a)
+        denominator1 = (b*b - a*c) * (
+            # (c - a) * np.sqrt(1 + 4*b*b / ((a - c)*(a - c))) - (c + a)
+            np.sqrt((a - c)*(a - c) + 4*b*b) - (a + c)
         )
         denominator2 = (b*b - a*c) * (
-            (a - c) * np.sqrt(1 + 4*b*b / ((a - c) * (a - c))) - (c + a)
+            # (a - c) * np.sqrt(1 + 4*b*b / ((a - c) * (a - c))) - (c + a)
+            - np.sqrt((a - c)*(a - c) + 4*b*b) - (a + c)
         )
-        width = np.sqrt(numerator / denominator1)
-        height = np.sqrt(numerator / denominator2)
+        width = np.sqrt(numerator / denominator1)     # semimajor axis length
+        height = np.sqrt(numerator / denominator2)    # semiminor axis length
 
         # Angle of counterclockwise rotation of major-axis of ellipse to x-axis
         # [eqn. 23] from (**) or [eqn. 26] from (***).
-        # NOTE: (**) has two solutions when b!=0. This one is for a<c
-        phi = .5 * np.arctan((2.*b) / (a - c))
-        # NOTE: (**) the value of  phi when b!=0 & a>c is:
-        # phi = np.pi/2 + .5 * np.arctan((2.*b) / (a - c))
+        if a < c :
+          # NOTE: (**) has two solutions when b!=0. This one is for a<c
+          phi = .5 * np.arctan((2.*b) / (a - c))
+        else :
+          # NOTE: (**) the value of  phi when b!=0 & a>c is:
+          phi = np.pi/2 + .5 * np.arctan((2.*b) / (a - c))
 
         return center, width, height, phi
 

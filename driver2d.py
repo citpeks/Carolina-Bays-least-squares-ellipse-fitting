@@ -9,6 +9,8 @@
 #  when a comment with *2D is included ahead of the data pairs
 #  A title for the graph is specified with a line starting with *T= title
 # 07/21/2022 - restricted azimuth calculation for 28>Lat<49 & -105<Lon<-66
+# 08/10/2022 - calculated area
+# 11/16/2022 - Updated azimuth calculation. 
 
 import numpy as np
 from ellipse import LsqEllipse
@@ -147,7 +149,6 @@ if __name__ == '__main__':
     X = np.array(list(zip(X1, Y1)))
     reg = LsqEllipse().fit(X)
     center, semimajor, semiminor, phi = reg.as_parameters()
-    # [to do] get percent error in fit
 
     # print("minlat=", minlat, " maxlon=", maxlon)
     # print(" MAIN sw2d=",sw2d)
@@ -170,21 +171,33 @@ if __name__ == '__main__':
       k2 = k1
       k1 = j
 
-    print(f'major: {2*k1:.3f}')
-    print(f'minor: {2*k2:.3f}')
+    print(f'major: {2*k1:.3f} m')
+    print(f'minor: {2*k2:.3f} m')
+    print(f'area: {np.pi*k1*k2:,.1f} square meters')    
     print(f'phi: {phi:.3f} ({np.rad2deg(phi):.3f} degrees)')
     # calculate azimuth
+    # phi = counterclockwise angle of rotation from the x-axis to the major-axis of the ellipse 
     if calc_azimuth == 1 :
       if phi < 0:       # phi is negative
-        # print("phi < 0")
-        azrad = np.pi/2 + abs(phi)  # |phi| + 90 degrees
-      elif semimajor < semiminor:     # case when major and minor axes were flipped.
-        # print("semimajor < semiminor")
-        azrad = np.pi - phi         # 180 - phi (phi>0)
+        print("phi < 0")
+        if semimajor < semiminor:     # case when major and minor axes were flipped.
+          print("semimajor < semiminor")
+          azrad = 3*np.pi/2 - abs(phi)         # 270 - |phi| (phi<0)
+        else:
+          print("semimajor > semiminor")  # untested
+          azrad = np.pi - abs(phi)         # 180 - |phi| (phi<0)
       else:
-        # print("semimajor > semiminor")
-        azrad = np.pi + np.pi/2 - phi
-
+        print("phi > 0")
+        if semimajor < semiminor:     # case when major and minor axes were flipped.
+          print("semimajor < semiminor")
+          if phi > np.pi/2 :  # phi > 90
+            azrad = 2*np.pi - phi      # 360 - phi
+          else:
+            azrad = np.pi - phi         # 180 - phi 
+        else:
+          print("semimajor > semiminor")  # untested
+          azrad = np.pi + np.pi/2 - phi
+      # end if phi < 0: 
       # convert radians to degrees 
       print(f'azimuth: {np.degrees(azrad):.2f}')
     # end if calc_azimuth == 1  
