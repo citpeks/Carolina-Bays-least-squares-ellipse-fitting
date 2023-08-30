@@ -11,7 +11,7 @@
 # 07/21/2022 - restricted azimuth calculation for 28>Lat<49 & -105<Lon<-66
 # 08/10/2022 - calculated area
 # 11/16/2022 - Updated azimuth calculation. 
-# 03/07/2023 - Updated azimuth calculation.
+# 08/30/2023 - Updated azimuth calculation phi<0 & semimajor < semiminor.
 
 import numpy as np
 from ellipse import LsqEllipse
@@ -183,7 +183,7 @@ if __name__ == '__main__':
         print("phi < 0")
         if semimajor < semiminor:     # case when major and minor axes were flipped.
           print("semimajor < semiminor")
-          azrad = 3*np.pi/2 - abs(phi)         # 270 - |phi| (phi<0)
+          azrad = np.pi + abs(phi)         # 180 + |phi| (phi<0)
         else:
           print("semimajor > semiminor")  
           azrad = np.pi/2 + abs(phi)         # 90 + |phi| (phi<0)  #az 230307
