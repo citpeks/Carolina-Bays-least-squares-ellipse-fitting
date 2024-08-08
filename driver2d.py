@@ -1,5 +1,5 @@
 # Python program to fit an ellipse to Carolina Bay rim coordinates.
-# A file "driver2d-coords.txt" contains more than six lines, each with the
+# A file "driver2d-coords.txt" contains more than four lines, each with the
 #   latitude and longitude of a point along the Carolina Bay rim.
 # Antonio Zamora July 5, 2022
 # 07/07/2022 - Added BOM handling
@@ -12,11 +12,14 @@
 # 08/10/2022 - calculated area
 # 11/16/2022 - Updated azimuth calculation. 
 # 08/30/2023 - Updated azimuth calculation phi<0 & semimajor < semiminor.
+# 08/07/2024 - Added option to specify the input file name and performed some checks on input data
 
 import numpy as np
 from ellipse import LsqEllipse
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
+import os
+import os.path
 
 # minlat and maxlon are global variables
 minlat = ""  
@@ -39,27 +42,54 @@ def read_coordinates():
     global calc_azimuth
     global title
 
-    file1 = open('driver2d-coords.txt', 'r', encoding='utf-8-sig') # remove BOM
+    file_name = input("Input File Name: ")  # request file name from user
+    if os.path.isfile(file_name) and os.access(file_name, os.R_OK):
+      pass  # file exists and is readable
+    else:  # File name supplied by user does not exist. 
+      xstr = file_name.replace(" ","")  # delete all blank spaces
+      if xstr == "":     # file name is null or blank
+        # use default file name
+        file_name = 'driver2d-coords.txt'
+      else:  # print error message and quit.
+        print("\n*** File not found: (" + file_name + ") ***\n")
+        exit()    
+
+    print("Processing file: " + file_name)
+    errct = 0
+    validct = 0
+    valid = set("0123456789,.- ")  #list of valid characters for coordinates
+    file1 = open(file_name, 'r', encoding='utf-8-sig') # remove BOM
     Lines = file1.readlines()
     for line in Lines:
-      line = line.strip()    # remove trailing spaces and \r
-      # print("line:", line)
+      line = line.strip()    # remove leading and trailing spaces
+      #  print("line:", line)  ###
       if line[0:3] == "*2D" or line[0:3] == "*2d" :   # check for 2D process indicator
         sw2d = 1
       if line[0:3] == "*T=" or line[0:3] == "*t=" :   # check for title line
         title = line[3:]
       # Skip blank lines and comments starting with * or #
       if not line.startswith('*') and not line.startswith('#') and not line == '':  
-        line = line.split(",")
-        # print("Lat: ", line[0], " Lon: ", line[1])  #print latitude and longitude
-        if sw2d == 1:
-          list1.append(line[1])   # plot (Y-coordinate)
-          list2.append(line[0])   # plot (X-coordinate)
-        else :
-          list1.append(line[0])   # Latitude (Y-coordinate)
-          list2.append(line[1])   # Longitude (X-coordinate)
-      # end if not ...  
+        lineset = set(line)
+        if lineset.issubset(valid):   # line contains only valid characters
+          validct = validct + 1      
+          line = line.split(",")
+          # print("Lat: ", line[0], " Lon: ", line[1])  #print latitude and longitude
+          if sw2d == 1:
+            list1.append(line[1])   # plot (Y-coordinate)
+            list2.append(line[0])   # plot (X-coordinate)
+          else :
+            list1.append(line[0])   # Latitude (Y-coordinate)
+            list2.append(line[1])   # Longitude (X-coordinate)
+        else:  # line contains invalid characters
+          errct = errct + 1        
+      # end if not * or # 
     file1.close()
+    if errct > 0:
+      print("Lines with errors=", errct)
+    if validct < 5:
+      print("Valid lines=",validct,"; five or more are required.")
+      exit()
+    print("")  # print blank line before main output
 
     # Find minimum X and Y coordinates
     if sw2d == 0 :  # Lat./Lon. Coordinates were input    
