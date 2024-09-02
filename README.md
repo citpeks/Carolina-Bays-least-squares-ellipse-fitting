@@ -3,3 +3,7 @@ The Carolina Bays are shallow elliptical depressions along the Atlantic Seaboard
 
 August 8, 2024 changes:
 driver2d.py now requests an input file name. If no file name is provided, the default file (driver2d-coords.txt) is used. Additional checks were added to check the validity of the input.
+
+September 2, 2024 further work:
+The program was ported to PyScript to be able to run the program in a web browser without the need to install Python on a computer.
+https://pyscript.com/@ellipses123/ellipse-fitting/latest  
