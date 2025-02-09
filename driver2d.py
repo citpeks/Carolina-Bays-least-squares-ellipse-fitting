@@ -15,6 +15,7 @@
 # 08/07/2024 - Added option to specify the input file name and performed some checks on input data
 # 01/31/2025 - Calculate Goodness of Fit (Mean Squared Error MSE)
 # 02/02/2025 - Added an option line *O= to activate DDT and GRID switches
+# 02/09/2025 - Used non-iterative method to calculate intersection point of line and ellipse
 
 import numpy as np
 import math
@@ -32,23 +33,46 @@ sw2d = 0   # 2D process indicator
 calc_azimuth = 0  # =1 to calculate azimuth
 title = ""
 
-# Xc,Yc are the coordinates of the center of the ellipse, L = major axis, W = minor axis , phi= angle of rotation
-def ellipse_parametric(t, Xc, Yc, L, W, phi):
-    x = Xc + (L/2) * np.cos(t) * np.cos(phi) - (W/2) * np.sin(t) * np.sin(phi)
-    y = Yc + (L/2) * np.cos(t) * np.sin(phi) + (W/2) * np.sin(t) * np.cos(phi)
-    return x, y
-
-def line_parametric(r, Xc, Yc, theta):
-  x = Xc + r * np.cos(theta)
-  y = Yc + r * np.sin(theta)
-  return x, y
-
-
-def equations(vars, Xc, Yc, L, W, phi, theta):
-    t, r = vars
-    x_ellipse, y_ellipse = ellipse_parametric(t, Xc, Yc, L, W, phi)
-    x_line, y_line = line_parametric(r, Xc, Yc, theta)
-    return [x_ellipse - x_line, y_ellipse - y_line]
+# * * * * * * *
+# Calculate the coordinates of the intersection point of the line and ellipse
+# * * * * * * *
+def ellipse_line_intersection(Xc, Yc, L, W, phi, theta):
+    # Calculate the parametric equations of the line
+    dx = (L / 2) * np.cos(theta)
+    dy = (L / 2) * np.sin(theta)
+    
+    # Transform the ellipse to the standard position
+    a = L / 2
+    b = W / 2
+    
+    # Rotate the line to align the ellipse with the coordinate axes
+    cos_phi = np.cos(phi)
+    sin_phi = np.sin(phi)
+    x1_rot = (dx * cos_phi + dy * sin_phi)
+    y1_rot = (-dx * sin_phi + dy * cos_phi)
+    
+    # Coefficients of the quadratic equation
+    A = (x1_rot / a) ** 2 + (y1_rot / b) ** 2
+    B = 2 * ((Xc * cos_phi + Yc * sin_phi - Xc * cos_phi - Yc * sin_phi) * x1_rot / a ** 2 + 
+             (Xc * sin_phi - Yc * cos_phi - Xc * sin_phi + Yc * cos_phi) * y1_rot / b ** 2)
+    C = ((Xc * cos_phi + Yc * sin_phi - Xc * cos_phi - Yc * sin_phi) ** 2 / a ** 2 +
+         (Xc * sin_phi - Yc * cos_phi - Xc * sin_phi + Yc * cos_phi) ** 2 / b ** 2) - 1
+    
+    # Solve the quadratic equation
+    discriminant = B ** 2 - 4 * A * C
+    if discriminant < 0:
+        return []  # No intersection
+    
+    t1 = (-B + np.sqrt(discriminant)) / (2 * A)
+    t2 = (-B - np.sqrt(discriminant)) / (2 * A)
+    
+    # Calculate the intersection points
+    x1 = Xc + dx * t1  # positive root
+    y1 = Yc + dy * t1
+    x2 = Xc + dx * t2  # negative root
+    y2 = Yc + dy * t2
+    
+    return [(x1, y1), (x2, y2)]  # return coordinates for positive and negative solutions
 
 # * * * * * * *
 # Read file with coordinates and return two lists containing the x and y data of the ellipse
@@ -237,14 +261,8 @@ if __name__ == '__main__':
         print(f'x[{n}]={x:,.4f} y[{n}]={y:,.4f} theta={theta:.4f} ({np.rad2deg(theta):.3f} deg.)')
 
       # calculate predicted intersection point on elliptical curve based on theta
-      # Initial guess for t and r (important for convergence)
-      # set initial guess: t=theta, r=semiminor
-      initial_guess = [theta, k2]  
-      # initial_guess = [0,1]   # override
-      # Solve the system of equations
-      t, r =  fsolve(equations, initial_guess, args=(center[0], center[1], k1*2, k2*2, phi, theta))
-      # Calculate intersection point
-      calc_x[n], calc_y[n] = ellipse_parametric(t, center[0], center[1], k1*2, k2*2, phi)
+      intersection_points = ellipse_line_intersection(center[0], center[1], k1*2, k2*2, phi, theta)
+      calc_x[n], calc_y[n] = intersection_points[0]  # select only the positive solution
       if ddt > 0 :
         print(f'   calc_x[{n}]={calc_x[n]:.3f}, calc_y[{n}]={calc_y[n]:.3f}')
 
