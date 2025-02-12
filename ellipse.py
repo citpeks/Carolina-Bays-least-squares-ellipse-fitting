@@ -1,30 +1,17 @@
-"""Demonstration of least-squares fitting of ellipses
+# * * * * * * * * * * * * * * * * * * *
+# LsqEllpse - Least Squares fitting of Elliptical data
+# * * * * * * * * * * * * * * * * * * *
+# 02/12/2025 az - returned coefficients for polynomial and modified
+#            as_parameters() to guarantee that semimajor > semiminor
 
-    __author__ = "Ben Hammel, Nick Sullivan-Molina"
-    __credits__ = ["Ben Hammel", "Nick Sullivan-Molina"]
-    __maintainer__ = "Ben Hammel"
-    __email__ = "bdhammel@gmail.com"
-    __status__ = "Development"
+import logging
 
-    Requirements
-    ------------
-    Python 2.X or 3.X
-    numpy
-    matplotlib
-
-    References
-    ----------
-    (*) Halir, R., Flusser, J.: 'Numerically Stable Direct Least Squares
-        Fitting of Ellipses'
-    (**) http://mathworld.wolfram.com/Ellipse.html
-    (***) White, A. McHale, B. 'Faraday rotation data analysis with least-squares  # noqa: E501
-        elliptical fitting'
-"""
-# 11/16/2022 az - modified calculation of [eqn. 21 and 22] from (**) to agree with wolfram
-#
 import numpy as np
 import numpy.linalg as la
 
+logger = logging.getLogger(__name__)
+
+__version__ = '2.2.0-dev'
 
 class LsqEllipse:
     """Least Squares fitting of Elliptical data
@@ -33,8 +20,8 @@ class LsqEllipse:
     ----------
     coef_ : array
         Estimated coefficients for the Least squares fit to the elliptical data
-        containing the values [a,b,c,d,f,g].T corresponding to
-        ax**2 + 2bxy + cy**2 + 2dx + 2fy + g
+        containing the values [a,b,c,d,f,g].T corresponding to Eqn 1 (*)
+        ax**2 + bxy + cy**2 + dx + ey + f
 
     References
     ----------
@@ -42,16 +29,25 @@ class LsqEllipse:
     Fitting of Ellipses'
     (**) Weisstein, Eric W. "Ellipse." From MathWorld--A Wolfram Web Resource.
     http://mathworld.wolfram.com/Ellipse.html
+    (***) https://mathworld.wolfram.com/InverseCotangent.html
 
     Examples
     --------
     >>> import numpy as np
-    >>> from sklearn.linear_model import LsqEllipse
+    >>> from ellipse import LsqEllipse
     >>> x = np.array([ 1.,  0., -1., -0.,  1.])
     >>> y = np.array([ 0. ,  0.5,  0. , -0.5, -0. ])
     >>> X = np.c_[x, y]
-    >>> reg = LsqEllipse().fit(X)
-    >>> reg.as_parameters()
+    >>> el = LsqEllipse().fit(X)
+    >>> center, width, height, phi = el.as_parameters()
+    >>> print(f"center: ({center[0]:.1f}, {center[1]:.1f})")
+    center: (-0.0, -0.0)
+    >>> print(f"width: {width:.1f}")
+    width: 0.5
+    >>> print(f"height: {height:.1f}")
+    height: 1.0
+    >>> print(f"phi: {phi:.1f}")
+    phi: 1.6
     """
     ALLOWED_FEATURES = 2
 
@@ -71,6 +67,10 @@ class LsqEllipse:
 
         return X
 
+    def _assert_ellipse_found(self):
+        if self.coef_ is None:
+            raise ValueError("Must call .fit() before using .return_fit()")
+
     def fit(self, X):
         """Fit the data
 
@@ -89,7 +89,7 @@ class LsqEllipse:
         x, y = X.T
 
         # Quadratic part of design matrix [eqn. 15] from (*)
-        D1 = np.vstack([x**2, x * y, y**2]).T
+        D1 = np.vstack([x**2, x*y, y**2]).T
         # Linear part of design matrix [eqn. 16] from (*)
         D2 = np.vstack([x, y, np.ones_like(x)]).T
 
@@ -109,18 +109,15 @@ class LsqEllipse:
         eigval, eigvec = np.linalg.eig(M)
 
         # Eigenvector must meet constraint 4ac - b^2 to be valid.
-        cond = (
-            4*np.multiply(eigvec[0, :], eigvec[2, :])
-            - np.power(eigvec[1, :], 2)
-        )
+        cond = 4*np.multiply(eigvec[0, :], eigvec[2, :]) - np.power(eigvec[1, :], 2)
         a1 = eigvec[:, np.nonzero(cond > 0)[0]]
 
         # |d f g> = -S3^(-1) * S2^(T)*|a b c> [eqn. 24]
         a2 = la.inv(-S3) @ S2.T @ a1
 
         # Eigenvectors |a b c d f g>
-        # list of the coefficients describing an ellipse [a,b,c,d,f,g]
-        # corresponding to ax**2 + 2bxy + cy**2 + 2dx + 2fy + g
+        # list of the coefficients describing an ellipse [a,b,c,d,e,f]
+        # corresponding to ax**2 + bxy + cy**2 + dx + ey + f from (*)
         self.coef_ = np.vstack([a1, a2])
 
         return self
@@ -132,12 +129,13 @@ class LsqEllipse:
 
         Returns
         -------
-        [a,b,c,d,f,g] corresponding to ax**2 + 2bxy + cy**2 + 2dx + 2fy + g
+        [a,b,c,d,f,g] corresponding to ax**2 + bxy + cy**2 + dx + ey + f from (*)
         """
-        return np.asarray(self.coef_).ravel()
+        self._assert_ellipse_found()
+        return tuple(c for c in self.coef_.ravel())
 
     def coeffs(self):
-      # return the six coefficients for the polynomial
+      # az- return the six coefficients for the polynomial
       return self.coefficients[0], self.coefficients[1], self.coefficients[2], self.coefficients[3], self.coefficients[4], self.coefficients[5]
 
     def as_parameters(self):
@@ -145,20 +143,22 @@ class LsqEllipse:
 
         Returns
         _______
-        center : list
-            [x0, y0]
-        width : float
-            Semimajor axis
-        height : float
-            Semiminor axis
+        center : tuple
+            (x0, y0)
+        semimajor : float
+            Total length (diameter) of horizontal axis.
+        semiminor : float
+            Total length (diameter) of vertical axis.
         phi : float
-            The counterclockwise angle of rotation from the x-axis to the major
-            axis of the ellipse
+            The counterclockwise angle [radians] of rotation from the x-axis to the semimajor axis
         """
 
         # Eigenvectors are the coefficients of an ellipse in general form
-        # a*x^2 + 2*b*x*y + c*y^2 + 2*d*x + 2*f*y + g = 0
-        # [eqn. 15) from (**) or (***)
+        # the division by 2 is required to account for a slight difference in
+        # the equations between (*) and (**)
+        # a*x^2 +   b*x*y + c*y^2 +   d*x +   e*y + f = 0  (*)  Eqn 1
+        # a*x^2 + 2*b*x*y + c*y^2 + 2*d*x + 2*f*y + g = 0  (**) Eqn 15
+        # We'll use (**) to follow their documentation
         a = self.coefficients[0]
         b = self.coefficients[1] / 2.
         c = self.coefficients[2]
@@ -167,33 +167,45 @@ class LsqEllipse:
         g = self.coefficients[5]
 
         # Finding center of ellipse [eqn.19 and 20] from (**)
-        x0 = (c*d - b*f) / (b**2. - a*c)
-        y0 = (a*f - b*d) / (b**2. - a*c)
-        center = [x0, y0]
+        x0 = (c*d - b*f) / (b**2 - a*c)
+        y0 = (a*f - b*d) / (b**2 - a*c)
+        center = (x0, y0)
 
         # Find the semi-axes lengths [eqn. 21 and 22] from (**)
         numerator = 2 * (a*f**2 + c*d**2 + g*b**2 - 2*b*d*f - a*c*g)
-        denominator1 = (b*b - a*c) * (
-            # (c - a) * np.sqrt(1 + 4*b*b / ((a - c)*(a - c))) - (c + a)
-            np.sqrt((a - c)*(a - c) + 4*b*b) - (a + c)
-        )
-        denominator2 = (b*b - a*c) * (
-            # (a - c) * np.sqrt(1 + 4*b*b / ((a - c) * (a - c))) - (c + a)
-            - np.sqrt((a - c)*(a - c) + 4*b*b) - (a + c)
-        )
-        width = np.sqrt(numerator / denominator1)     # semimajor axis length
-        height = np.sqrt(numerator / denominator2)    # semiminor axis length
+        denominator1 = (b**2 - a*c) * ( np.sqrt((a-c)**2+4*b**2) - (c+a))  # noqa: E201
+        denominator2 = (b**2 - a*c) * (-np.sqrt((a-c)**2+4*b**2) - (c+a))
+        semimajor = np.sqrt(numerator / denominator1)    # semimajor axis 
+        semiminor = np.sqrt(numerator / denominator2)    # semiminor axis 
 
         # Angle of counterclockwise rotation of major-axis of ellipse to x-axis
-        # [eqn. 23] from (**) or [eqn. 26] from (***).
-        if a < c :
-          # NOTE: (**) has two solutions when b!=0. This one is for a<c
-          phi = .5 * np.arctan((2.*b) / (a - c))
-        else :
-          # NOTE: (**) the value of  phi when b!=0 & a>c is:
-          phi = np.pi/2 + .5 * np.arctan((2.*b) / (a - c))
+        # [eqn. 23] from (**)  
+        # w/ trig identity eqn 9 form (***)
+        if b == 0 and a < c:
+            phi = 0.0
+        elif b == 0 and a > c:
+            phi = np.pi/2
+        elif b != 0 and a < c:
+            phi = 0.5 * np.arctan(2*b/(a-c))
+        elif b != 0 and a > c:
+            phi = 0.5 * (np.pi + np.arctan(2*b/(a-c)))
+        elif a == c:
+            logger.warning("Ellipse is a perfect circle, the answer is degenerate")
+            phi = 0.0
+        else:
+            raise RuntimeError("Unreachable")
 
-        return center, width, height, phi
+        # verify that semimajor > semiminor
+        if  semimajor < semiminor:  # swap 
+          # print(" ** ellipse semimajor < semiminor ** swapping")
+          j = semiminor;
+          semiminor = semimajor
+          semimajor = j
+          # adjust phi by 90 degrees
+          phi += np.pi/2
+        phi = phi % np.pi   # modulo 180 degrees
+
+        return center, semimajor, semiminor, phi
 
     def return_fit(self, n_points=None, t=None):
         """Return the X, Y values of the predicted ellipse
@@ -214,23 +226,18 @@ class LsqEllipse:
         X : array, shape (n_points, 2)
             data values for the x-y data pairs
         """
-        if self.coef_ is None:
-            raise ValueError("Must call .fit() before using .return_fit()")
+        self._assert_ellipse_found()
 
         if n_points is None and t is None:
             raise AttributeError("A value for `n_points` or `t` must be ",
                                  "provided")
 
         if t is None:
-            t = np.linspace(0, 2 * np.pi, n_points)
+            t = np.linspace(0, 2*np.pi, n_points)
 
         center, width, height, phi = self.as_parameters()
 
-        x = (center[0]
-             + width * np.cos(t) * np.cos(phi)
-             - height * np.sin(t) * np.sin(phi))
-        y = (center[1]
-             + width * np.cos(t) * np.sin(phi)
-             + height * np.sin(t) * np.cos(phi))
+        x = (center[0] + width * np.cos(t) * np.cos(phi) - height * np.sin(t) * np.sin(phi))
+        y = (center[1] + width * np.cos(t) * np.sin(phi) + height * np.sin(t) * np.cos(phi))
 
         return np.c_[x, y]

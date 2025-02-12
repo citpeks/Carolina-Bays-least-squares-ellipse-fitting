@@ -16,9 +16,11 @@
 # 01/31/2025 - Calculate Goodness of Fit (Mean Squared Error MSE)
 # 02/02/2025 - Added an option line *O= to activate DDT and GRID switches
 # 02/09/2025 - Used non-iterative method to calculate intersection point of line and ellipse
+# 02/11/2025 - Allowed option to use EllipseModel() in skimage  *O= model
 
 import numpy as np
 import math
+# from skimage.measure import EllipseModel   # remove pound sign to activate this feature
 from ellipse import LsqEllipse
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
@@ -89,9 +91,11 @@ def read_coordinates():
     global title
     global ddt
     global displaygrid
+    global model
 
     ddt = 0          # =1 for debugging, else =0
     displaygrid = 0  # =1 to display grid, else =0
+    model = 0        # = 1 to use EllipseModel() in skimage instead of lsqEllipse
 
     file_name = input("Input File Name: ")  # request file name from user
     if os.path.isfile(file_name) and os.access(file_name, os.R_OK):
@@ -123,6 +127,8 @@ def read_coordinates():
           ddt = 1  # activate debugging 
         if "GRID" in line or "grid" in line :
           displaygrid = 1  # activate grid display in output image 
+        if "MODEL" in line or "model" in line :
+          model = 1  # activate EllipseModel() in skimage 
       # Skip blank lines and comments starting with * or #
       if not line.startswith('*') and not line.startswith('#') and not line == '':  
         lineset = set(line)
@@ -200,13 +206,21 @@ def read_coordinates():
 if __name__ == '__main__':
     
     X1, Y1 = read_coordinates() 
-
     X = np.array(list(zip(X1, Y1)))
-    reg = LsqEllipse().fit(X)
-    center, semimajor, semiminor, phi = reg.as_parameters()
-    # phi = counterclockwise angle of rotation from the x-axis to the major-axis of the ellipse 
-    # NOTE: LsqEllipse() does not reliably return samimajor > semiminor
-    #       Any changes to LsqEllipse() would affect the display of the ellipse
+    # fit an ellipse to the set of points using a least squares method
+    if model > 0 :  # use EllipseModel() in skimage 
+      print(f'Using EllipseModel() in skimage.')
+      reg = EllipseModel()  
+      reg.estimate(X)
+      xc, yc, semimajor, semiminor, phi = reg.params  
+      center = (xc, yc)
+    else :
+      reg = LsqEllipse().fit(X)
+      center, semimajor, semiminor, phi = reg.as_parameters()
+      # phi = counterclockwise angle of rotation from the x-axis to the major-axis of the ellipse 
+      print("coefficients for  F(x,y) = ax**2 + 2bxy + cy**2 + 2dx + 2fy + g")
+      a, b, c, d, f, g = reg.coeffs()
+      print(f'a={a:.3f}, b={b:.3f}, c={c:.3f}, d={d:.3f}, f={f:.3f}, g={g:.3f}')
 
     print(title)
     print(f'center: {center[0]:.3f}, {center[1]:.3f}')  # center of ellipse
@@ -216,6 +230,8 @@ if __name__ == '__main__':
     k1 = semimajor
     k2 = semiminor
     if k1 < k2:  # swap so major axis is larger than minor axis
+      # NOTE: The previous version of LsqEllipse() did not guarantee semimajor > semiminor
+      #       This program tests and corrects for this condition here and in the azimuth calculation
       print("semimajor < semiminor")
       j = k2;
       k2 = k1
@@ -227,13 +243,10 @@ if __name__ == '__main__':
       else : 
         phi -= math.radians(90)  
     else : 
-      print("semimajor > semiminor") 
+      if ddt > 0 : print("semimajor > semiminor") 
       if phi > math.radians(90) : phi -= math.radians(180)
 
     if ddt > 0 : print(f' Adjusted phi = {phi:.4f} ({np.rad2deg(phi):.3f} deg.)')
-    print("coefficients for  F(x,y) = ax**2 + 2bxy + cy**2 + 2dx + 2fy + g")
-    a, b, c, d, f, g = reg.coeffs()
-    print(f'a={a:.3f}, b={b:.3f}, c={c:.3f}, d={d:.3f}, f={f:.3f}, g={g:.3f}')
 
     X2 = np.array(X1)    # experimental points
     Y2 = np.array(Y1)
@@ -276,7 +289,7 @@ if __name__ == '__main__':
       n = n + 1
 
     print(f'center: {center[0]:.3f}, {center[1]:.3f}')
-    print(f'Number of points = {n1}')
+    # print(f'Number of points = {n1}')
     print(f'Residual Sum of Squares (RSS) = {sumofsquares:,.4f}')
     MSE = sumofsquares/n
     print(f'Mean Squared Error (MSE) = {MSE:,.4f}')
