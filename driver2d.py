@@ -17,6 +17,7 @@
 # 02/02/2025 - Added an option line *O= to activate DDT and GRID switches
 # 02/09/2025 - Used non-iterative method to calculate intersection point of line and ellipse
 # 02/11/2025 - Allowed option to use EllipseModel() in skimage  *O= model
+# 12/29/2025 - Calculated Scaled Mean Squared Error (SMSE) and MAD/semiminor
 
 import numpy as np
 import math
@@ -31,6 +32,7 @@ import os.path
 # These are global variables
 minlat = ""  
 maxlon = "" 
+ddt = 0    # debugging switch
 sw2d = 0   # 2D process indicator
 calc_azimuth = 0  # =1 to calculate azimuth
 title = ""
@@ -89,7 +91,6 @@ def read_coordinates():
     global sw2d
     global calc_azimuth
     global title
-    global ddt
     global displaygrid
     global model
 
@@ -254,12 +255,20 @@ if __name__ == '__main__':
     n1 = len(X2)
     calc_x = [0]*n1   # coordinates of points along the elliptical curve
     calc_y = [0]*n1
-    print(f'Number of points = {n1}')
+    scaledydiff = [0]*n1
+    #  print(f'Number of points = {n1}')
+
+    # Calculate scaling_factor relative to a semiminor axis of 1000
+    scaling_factor = 1000/semiminor
+    print(f'scaling factor = {scaling_factor}')
 
     n = 0
     MSE = 0   # Mean Squared Error [ 1/n * SUM(y_observed - y_predicted)^2 ]
+    SMSE = 0  # Scaled Mean Squared Error
     square_of_errors = 0   # (y_observed - y_predicted)^2 
+    scaled_square_of_errors = 0
     sumofsquares = 0 
+    sumofscaledsquares = 0
     sumofabsoluteerrors = 0
     distance = 0
     sum_of_error_distances = 0
@@ -280,7 +289,11 @@ if __name__ == '__main__':
         print(f'   calc_x[{n}]={calc_x[n]:.3f}, calc_y[{n}]={calc_y[n]:.3f}')
 
       square_of_errors = (y - calc_y[n])**2  # (y_observed - y_predicted)^2 
+      # The scaling is applied to the linear distance before squaring
+      scaledydiff[n] = scaling_factor * (y - calc_y[n])  # this is a signed number
+      scaled_square_of_errors = (scaling_factor * abs(y - calc_y[n]))**2
       sumofsquares += square_of_errors       # SUM(y_observed - y_predicted)^2
+      sumofscaledsquares += scaled_square_of_errors
       sumofabsoluteerrors += abs(calc_y[n] - y)  # predicted minus observed value
       # distance between observed and predicted points
       distance = math.sqrt((x - calc_x[n])**2 + (square_of_errors))  
@@ -288,12 +301,20 @@ if __name__ == '__main__':
 
       n = n + 1
 
-    print(f'center: {center[0]:.3f}, {center[1]:.3f}')
-    # print(f'Number of points = {n1}')
+    # print(f'center: {center[0]:.3f}, {center[1]:.3f}')
+    print(f'Number of points = {n1}')
     print(f'Residual Sum of Squares (RSS) = {sumofsquares:,.4f}')
     MSE = sumofsquares/n
     print(f'Mean Squared Error (MSE) = {MSE:,.4f}')
-    print(f'Mean Absolute Error (MAE) = {sumofabsoluteerrors/n:,.4f}')
+    sigma = math.sqrt(MSE)  # standard deviation
+    print(f'Standard Deviation = {sigma:,.4f}')
+    print(f'Residual Sum of Scaled Squares (RSSS) = {sumofscaledsquares:,.4f}') 
+    SMSE = sumofscaledsquares/n
+    print(f'Scaled Mean Squared Error (SMSE) = {SMSE:,.4f}')
+    print(f'Scaled Deviation = {math.sqrt(SMSE):,.4f}')
+    MAD = sumofabsoluteerrors/n1
+    print(f'Mean Absolute Deviation (MAD) = {MAD:,.4f}')
+    print(f'MAD/semiminor = {(sumofabsoluteerrors*100)/(n*k2):,.4f}%')
     # print(f'Sum of error distances = {sum_of_error_distances:,.4f}')
     # the following varies according to the number of samples
     # print(f'Percent distance error relative to semiminor axis = {sum_of_error_distances*100/k2:.4f}%')
@@ -317,7 +338,7 @@ if __name__ == '__main__':
     # calculate azimuth
     if calc_azimuth == 1 :
       if phi < 0:       # phi is negative
-        print("phi < 0")
+        # print("phi < 0")
         if semimajor < semiminor:     # case when major and minor axes were flipped.
           # print("semimajor < semiminor")
           azrad = np.pi + abs(phi)         # 180 + |phi| (phi<0)
@@ -325,7 +346,7 @@ if __name__ == '__main__':
           # print("semimajor > semiminor")  
           azrad = np.pi/2 + abs(phi)         # 90 + |phi| (phi<0)  #az 230307
       else:     # phi is positive
-        print("phi > 0")
+        # print("phi > 0")
         if semimajor < semiminor:     # case when major and minor axes were flipped.
           # print("semimajor < semiminor")
           if phi > np.pi/2 :  # phi > 90
@@ -339,6 +360,10 @@ if __name__ == '__main__':
       # convert radians to degrees 
       print(f'azimuth: {np.degrees(azrad):.2f}')
     # end if calc_azimuth == 1  
+
+    # print(f'\n== Scaled difference ==')
+    # for item in scaledydiff:
+    #   print(item)
 
     fig = plt.figure(figsize=(6, 6))
     ax = plt.subplot()
