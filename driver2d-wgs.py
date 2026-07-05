@@ -402,6 +402,9 @@ if __name__ == '__main__':
 
     plt.xlabel('$X_1$')
     plt.ylabel('$Y_1$')
+    if sw2d == 0 :
+      ax.text(x=0.98,y=0.98,s='WGS',transform=ax.transAxes,    
+      fontsize=10, va='top', ha='right' )  # World Geodetic System
     if displaygrid > 0:
       plt.grid()
     # plt.legend()
