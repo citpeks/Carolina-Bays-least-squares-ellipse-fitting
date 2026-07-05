@@ -347,9 +347,14 @@ if __name__ == '__main__':
     phi = origphi  # restore original phi
     if sw2d == 0 :
       # Calculate geographical coordinates for center
-      Latitude = float(minlat) + center[1]/111111
-      Longitude = float(maxlon) + center[0]/(111111*np.cos(np.radians(float(minlat))))
-      print(f'center Lat.,Lon. {Latitude:.6f}, {Longitude:.6f}')
+      # Compute meters-per-degree at the reference latitude
+      lat0 = float(minlat)
+      M_lat = meters_per_degree_lat(lat0)   # meters per degree latitude
+      N_lon = meters_per_degree_lon(lat0)   # meters per degree longitude
+      Latitude = float(minlat) + center[1]/M_lat
+      Longitude = float(maxlon) + center[0]/N_lon
+      print(f'WGS center Lat.,Lon. {Latitude:.6f}, {Longitude:.6f}')
+
 
     print(f'major: {2*k1:.3f} m')
     print(f'minor: {2*k2:.3f} m')
