@@ -18,9 +18,11 @@
 # 02/09/2025 - Used non-iterative method to calculate intersection point of line and ellipse
 # 02/11/2025 - Allowed option to use EllipseModel() in skimage  *O= model
 # 12/29/2025 - Calculated Scaled Mean Squared Error (SMSE) and MAD/semiminor
+# 10/25/2026 - Improved diagnostics for bad data
 
 import numpy as np
 import math
+import re
 # from skimage.measure import EllipseModel   # remove pound sign to activate this feature
 from ellipse import LsqEllipse
 import matplotlib.pyplot as plt
@@ -113,11 +115,13 @@ def read_coordinates():
     print("Processing file: " + file_name)
     errct = 0
     validct = 0
+    coords = 1  # assume imput is geographical coordinates
     valid = set("0123456789,.- ")  #list of valid characters for coordinates
     file1 = open(file_name, 'r', encoding='utf-8-sig') # remove BOM
     Lines = file1.readlines()
     for line in Lines:
       line = line.strip()    # remove leading and trailing spaces
+      line = re.sub(r'\t', ' ', line) # change tabs to spaces
       # print("line:", line)  ###
       if line[0:3] == "*2D" or line[0:3] == "*2d" :   # check for 2D process indicator
         sw2d = 1
@@ -137,6 +141,9 @@ def read_coordinates():
           validct = validct + 1      
           line = line.split(",")
           # print("Lat: ", line[0], " Lon: ", line[1])  #print latitude and longitude
+          # maximum value for latitude is 90 and for longitude 180
+          if int(abs(float(line[0]))) > 90 or int(abs(float(line[1]))) > 180 :
+            coords = 0  # not geographical coordinates
           if sw2d == 1:
             list1.append(line[1])   # plot (Y-coordinate)
             list2.append(line[0])   # plot (X-coordinate)
@@ -144,11 +151,16 @@ def read_coordinates():
             list1.append(line[0])   # Latitude (Y-coordinate)
             list2.append(line[1])   # Longitude (X-coordinate)
         else:  # line contains invalid characters
-          errct = errct + 1        
+          errct = errct + 1  
+          print("***ERROR*** ", line)       
       # end if not * or # 
     file1.close()
     if errct > 0:
       print("Lines with errors=", errct)
+      if sw2d == 1 and coords == 1 :
+        print("***WARNING*** Invalid use of *2D option")
+      if sw2d == 0 and coords == 0 :
+        print("***ERROR*** Use *2D option")
     if validct < 5:
       print("Valid lines=",validct,"; five or more are required.")
       exit()
